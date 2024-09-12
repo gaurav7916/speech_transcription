@@ -1,113 +1,41 @@
 import streamlit as st
-import websockets
-import asyncio
-import base64
-import json
-from configure import auth_key
+import speech_recognition as sr
+from pydub import AudioSegment
 
-import sounddevice as sd
-import numpy as np
+def convert_audio_to_wav(audio_file):
+    audio = AudioSegment.from_file(audio_file)
+    wav_file = audio_file.name.split(".")[0] + ".wav"
+    audio.export(wav_file, format="wav")
+    return wav_file
 
-if 'text' not in st.session_state:
-	st.session_state['text'] = 'Listening...'
-	st.session_state['run'] = False
+def speech_to_text(audio_file):
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(audio_file) as source:
+        audio = recognizer.record(source)
+        try:
+            text = recognizer.recognize_google(audio)
+            return text
+        except sr.UnknownValueError:
+            return "Could not understand audio"
+        except sr.RequestError as e:
+            return f"Error: {str(e)}"
 
- 
-FRAMES_PER_BUFFER = 3200
-FORMAT = np.paInt16
-CHANNELS = 1
-RATE = 16000
-#p = pyaudio.PyAudio()
- 
-# starts recording
-def callback(indata, frames, time, status):
-    if status:
-        print(status)
-    data = indata.copy()
-	
-stream = sd.InputStream(
-    samplerate=RATE,
-    channels=CHANNELS,
-    callback=callback,
-    blocksize=FRAMES_PER_BUFFER
-)
+def main():
+    st.title("Speech to Text Converter")
+    st.write("Upload an audio file and convert it to text.")
 
-def start_listening():
-	st.session_state['run'] = True
+    uploaded_file = st.file_uploader("Choose an audio file", type=["wav", "mp3"])
 
-def stop_listening():
-	st.session_state['run'] = False
+    if uploaded_file is not None:
+        file_details = {"Filename": uploaded_file.name, "FileType": uploaded_file.type}
+        st.write(file_details)
 
+        if uploaded_file.type == "audio/mp3":
+            uploaded_file = convert_audio_to_wav(uploaded_file)
 
-st.title('Get real-time transcription')
+        text = speech_to_text(uploaded_file)
+        st.write("Converted Text:")
+        st.write(text)
 
-start, stop = st.columns(2)
-start.button('Start listening', on_click=start_listening)
-
-stop.button('Stop listening', on_click=stop_listening)
-
-URL = "wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000"
- 
-
-async def send_receive():
-	
-	print(f'Connecting websocket to url ${URL}')
-
-	async with websockets.connect(
-		URL,
-		extra_headers=(("Authorization", auth_key),),
-		ping_interval=5,
-		ping_timeout=20
-	) as _ws:
-
-		r = await asyncio.sleep(0.1)
-		print("Receiving SessionBegins ...")
-
-		session_begins = await _ws.recv()
-		print(session_begins)
-		print("Sending messages ...")
-
-
-		async def send():
-			while st.session_state['run']:
-				try:
-					data = stream.read(FRAMES_PER_BUFFER)
-					data = base64.b64encode(data).decode("utf-8")
-					json_data = json.dumps({"audio_data":str(data)})
-					r = await _ws.send(json_data)
-
-				except websockets.exceptions.ConnectionClosedError as e:
-					print(e)
-					assert e.code == 4008
-					break
-
-				except Exception as e:
-					print(e)
-					assert False, "Not a websocket 4008 error"
-
-				r = await asyncio.sleep(0.01)
-
-
-		async def receive():
-			while st.session_state['run']:
-				try:
-					result_str = await _ws.recv()
-					result = json.loads(result_str)['text']
-
-					if json.loads(result_str)['message_type']=='FinalTranscript':
-						print(result)
-						st.session_state['text'] = result
-						st.markdown(st.session_state['text'])
-
-				except websockets.exceptions.ConnectionClosedError as e:
-					print(e)
-					assert e.code == 4008
-					break
-
-				except Exception as e:
-					print(e)
-					assert False, "Not a websocket 4008 error"
-			
-		send_result, receive_result = await asyncio.gather(send(), receive())
-
-asyncio.run(send_receive())
+if __name__ == "__main__":
+    main()
