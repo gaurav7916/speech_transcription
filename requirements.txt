@@ -1,4 +1,7 @@
-openai-whisper @ git+https://github.com/openai/whisper.git@248b6cb124225dd263bb9bd32d060b6517e067f8
-yt-dlp==2023.3.4
-zipp==3.15.0
-streamlit
+av==9.2.0
+deepspeech==0.9.3
+numpy==1.23.0
+pydub==0.25.1
+streamlit==1.20.0
+streamlit_webrtc==0.45.0
+twilio~=8.1.0
