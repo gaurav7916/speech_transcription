@@ -5,7 +5,8 @@ import base64
 import json
 from configure import auth_key
 
-import pyaudio
+import sounddevice as sd
+import numpy as np
 
 if 'text' not in st.session_state:
 	st.session_state['text'] = 'Listening...'
@@ -13,18 +14,22 @@ if 'text' not in st.session_state:
 
  
 FRAMES_PER_BUFFER = 3200
-FORMAT = pyaudio.paInt16
+FORMAT = np.paInt16
 CHANNELS = 1
 RATE = 16000
-p = pyaudio.PyAudio()
+#p = pyaudio.PyAudio()
  
 # starts recording
-stream = p.open(
-   format=FORMAT,
-   channels=CHANNELS,
-   rate=RATE,
-   input=True,
-   frames_per_buffer=FRAMES_PER_BUFFER
+def callback(indata, frames, time, status):
+    if status:
+        print(status)
+    data = indata.copy()
+	
+stream = sd.InputStream(
+    samplerate=RATE,
+    channels=CHANNELS,
+    callback=callback,
+    blocksize=FRAMES_PER_BUFFER
 )
 
 def start_listening():
@@ -104,6 +109,5 @@ async def send_receive():
 					assert False, "Not a websocket 4008 error"
 			
 		send_result, receive_result = await asyncio.gather(send(), receive())
-
 
 asyncio.run(send_receive())
