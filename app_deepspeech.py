@@ -1,54 +1,86 @@
 import os
-import assemblyai as aai
-from dotenv import load_dotenv, find_dotenv
+
 import streamlit as st
+from src.youtube_downloader import youtube_downloader
+from src.speech_to_text import process_file
+from src.file_management import st_save_uploaded_file, create_dir_if_not_exists
 
-st.title("AI Assistant")
-st.markdown("This AI Assistant will transcribe your speech in real-time.")
 
-class AI_Assistant:
-    def __init__(self):
-        load_dotenv(find_dotenv())
-        aai.settings.api_key = os.getenv("9c8e0dd36b64455384fe19951cf0dc71")
-        
-        self.transcriber = None
+def app():
+    # Set up page
+    st.set_page_config(
+        page_title=st.secrets["page"]["page_title"],
+        page_icon=st.secrets["page"]["page_icon"],
+        layout=st.secrets["page"]["layout"])
+    st.markdown(st.secrets["page"]["hide_menu_style"], unsafe_allow_html=True)
+    st.markdown(st.secrets["page"]["footer"], unsafe_allow_html=True)
 
-    def start_transcription(self):
-        self.transcriber = aai.RealtimeTranscriber(
-            sample_rate=16000,
-            on_data=self.on_data,
-            on_error=self.on_error,
-            on_open=self.on_open,
-            on_close=self.on_close,
-            end_utterance_silence_threshold=1000
+    # Session State Initialization
+    if 'processed' not in st.session_state:
+        st.session_state['processed'] = False
+    if 'file_path' not in st.session_state:
+        st.session_state['file_path'] = ""
+    if 'done' not in st.session_state:
+        st.session_state['done'] = False
+
+    # database path
+    database_path = st.secrets["data"]["database_path"]
+    create_dir_if_not_exists(database_path)
+
+    # Header
+    st.image("./assets/images/banner.png")
+    st.markdown(open("./assets/text/introduction.md",
+                'r').read(), unsafe_allow_html=True)
+
+    # choose an input method
+    choice = st.radio(
+        "Choose an input method:",
+        ("Enter a YouTube link", "Upload a file"),
+        index=0,
+        format_func=lambda x: "📁 " + x if x == "Upload a file" else "🔗 " + x
+    )
+
+    # Create a file uploader widget
+    if choice == "Upload a file":
+        uploaded_file = st.file_uploader(
+            "Upload a file",
+            type=["wav", "flac"],
+            accept_multiple_files=False
         )
-        self.transcriber.connect()
-        microphone_stream = aai.extras.MicrophoneStream(sample_rate=16000)
-        self.transcriber.stream(microphone_stream)
-    
-    def stop_transcription(self):
-        if self.transcriber:
-            self.transcriber.close()
-            self.transcriber = None
-    
-    def on_open(self, session_opened: aai.RealtimeSessionOpened):
-        # Optional: print("Session ID:", session_opened.session_id)
-        pass
+        if uploaded_file is not None:
+            # Save uploaded file to disk
+            st_save_uploaded_file(uploaded_file, database_path)
+            # Process downloaded file
+            if st.button("Process File"):
+                with st.spinner('Processing file...'):
+                    results = process_file(os.path.join(
+                        database_path, uploaded_file.name))
+                st.text_area("Speaker's script:", results, height=512)
+                st.session_state["done"] = True
 
-    def on_data(self, transcript: aai.RealtimeTranscript):
-        if not transcript.text:
-            return
-        if isinstance(transcript, aai.RealtimeFinalTranscript):
-            # Ensure only final transcripts are processed and displayed
-            print(transcript.text)  # Output to console
-            st.write(transcript.text)  # Display in Streamlit
+    # Create a text area widget for YouTube link
+    elif choice == "Enter a YouTube link":
+        youtube_link = st.text_input("Enter a YouTube link")
+        if youtube_link:
+            if not st.session_state['processed']:
+                if youtube_link.find("list") == -1:
+                    with st.spinner('Donwloading from Youtube'):
+                        file_path = youtube_downloader(
+                            youtube_link, database_path)
+                        st.session_state['file_path'] = file_path
+                        st.session_state['processed'] = True
+            if youtube_link.find("list") != -1:
+                st.warning(
+                    "This page doesn't work with playlist, please give simple video url.")
 
-    def on_error(self, error: aai.RealtimeError):
-        print("An error occurred:", error)
+            # Process downloaded file
+            if st.session_state['file_path'] != "":
+                if st.button("Process File"):
+                    with st.spinner('Processing file...'):
+                        results = process_file(st.session_state['file_path'])
+                    st.text_area("Speaker's script:", results, height=2048)
+                    st.session_state["done"] = True
 
-    def on_close(self):
-        print("Transcription session closed.")
 
-# Initialize and start transcription
-ai_assistant = AI_Assistant()
-ai_assistant.start_transcription()
+if __name__ == "__main__":
+    app()
