@@ -118,9 +118,7 @@ trained on American English is being served.
     download_file(MODEL_URL, MODEL_LOCAL_PATH, expected_size=188915987)
     download_file(LANG_MODEL_URL, LANG_MODEL_LOCAL_PATH, expected_size=953363776)
 
-    lm_alpha = 0.931289039105002
-    lm_beta = 1.1834137581510284
-    beam = 100
+    lm_alpha, lm_beta, beam = 0.931, 1.183, 100
 
     sound_only_page = "Sound only (sendonly)"
     with_video_page = "With video (sendrecv)"
